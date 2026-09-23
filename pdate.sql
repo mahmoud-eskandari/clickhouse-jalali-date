@@ -43,6 +43,9 @@ CREATE OR REPLACE FUNCTION pdate_jd AS (day_of_year) ->
 
 -- Singleton lambdas bind intermediate results once. This avoids expanding the
 -- entire Gregorian conversion repeatedly when ClickHouse inlines SQL UDFs.
+-- Keep the range check numeric. On ClickHouse 25.8, the preimage optimizer
+-- rewrites bare toYear(DateTime) bounds to timestamps outside DateTime's range,
+-- incorrectly rejecting valid column values (constant-only tests miss this).
 CREATE OR REPLACE FUNCTION pdate AS (gregorian_date) ->
     arrayMap(jdn ->
         arrayMap(day_of_year -> concat(
@@ -51,7 +54,7 @@ CREATE OR REPLACE FUNCTION pdate AS (gregorian_date) ->
             leftPad(toString(pdate_jd(day_of_year)), 2, '0')
         ), [pdate_j3(jdn)])[1],
         [pdate_gdn(gregorian_date) - 79 + throwIf(
-            toYear(gregorian_date) < 1900 OR toYear(gregorian_date) > 2123,
+            toInt64(toYear(gregorian_date)) < 1900 OR toInt64(toYear(gregorian_date)) > 2123,
             'pdate supports Gregorian dates from 1900-01-01 through 2123-12-31')]
     )[1];
 
